@@ -2,7 +2,7 @@
   <section class="rico-helper-page">
     <div class="header-row">
       <div class="title-row">
-        <img src="/rico-logo.svg" alt="RiC-O Navigator logo" class="app-logo" />
+        <img :src="appLogoUrl" alt="RiC-O Navigator logo" class="app-logo" />
         <h1>RiC-O Navigator</h1>
       </div>
       <p v-if="loadError" class="error">{{ loadError }}</p>
@@ -832,6 +832,9 @@ const playgroundBaseWidth = 960;
 const playgroundBaseHeight = 560;
 const playgroundGraphRef = ref<VNetworkGraphInstance | null>(null);
 const playgroundZoom = ref(1);
+const appBaseUrl = import.meta.env.BASE_URL;
+const appLogoUrl = `${appBaseUrl}rico-logo.svg`;
+const dataJsonUrl = `${appBaseUrl}rico-data.json`;
 
 const localName = (iri: string) => {
   const hash = iri.lastIndexOf('#');
@@ -1770,7 +1773,7 @@ const activateTab = async (tab: TabKey) => {
 const loadNavigatorData = async () => {
   loadError.value = '';
   try {
-    const res = await fetch('/rico-data.json', { cache: 'no-store' });
+    const res = await fetch(dataJsonUrl, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to load rico-data.json (' + res.status + ')');
     const payload = (await res.json()) as NavigatorData;
     allClasses.value = payload.classes ?? [];
