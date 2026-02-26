@@ -5,7 +5,12 @@
         <img :src="appLogoUrl" alt="RiC-O Navigator logo" class="app-logo" />
         <h1>RiC-O Navigator</h1>
       </div>
-      <p v-if="loadError" class="error">{{ loadError }}</p>
+      <div class="header-actions">
+        <p v-if="loadError" class="error">{{ loadError }}</p>
+        <button type="button" class="icon-btn info-icon-btn" title="About RiC-O Navigator" aria-label="About RiC-O Navigator" @click="showAboutModal = true">
+          i
+        </button>
+      </div>
     </div>
 
     <article class="card tabs-card">
@@ -775,6 +780,28 @@
           <p v-if="activeDetailsError" class="error">{{ activeDetailsError }}</p>
         </article>
       </div>
+
+      <div v-if="showAboutModal" class="details-modal-backdrop" @click.self="showAboutModal = false">
+        <article class="details-card about-modal">
+          <div class="details-modal-actions">
+            <button type="button" class="icon-btn close-btn" @click="showAboutModal = false" title="Close about">✕</button>
+          </div>
+          <h2>About RiC-O Navigator</h2>
+          <p>
+            RiC-O Navigator is an interactive explorer and playground for the Records in Contexts Ontology (RiC-O), helping users discover classes and
+            properties and design directed semantic graphs.
+          </p>
+          <p><strong>Supported RiC-O version:</strong> 1.1</p>
+          <p>
+            <a class="uri-link" href="https://www.ica.org/standards/RiC/RiC-O_1-1.html" target="_blank" rel="noopener noreferrer">
+              Official RiC-O page (ICA)
+            </a>
+          </p>
+          <p>
+            <a class="uri-link" href="https://github.com/ICA-EGAD/RiC-O" target="_blank" rel="noopener noreferrer">RiC-O GitHub repository</a>
+          </p>
+        </article>
+      </div>
     </article>
   </section>
 </template>
@@ -932,6 +959,7 @@ const riconavValidatorsByVersion: Record<number, ValidateFunction> = {
 
 const activeTab = ref<TabKey>('classes');
 const activeDetailsKind = ref<DetailsKind>('');
+const showAboutModal = ref(false);
 
 const classSearchText = ref('');
 const classIsSearching = ref(false);
@@ -2425,6 +2453,12 @@ onMounted(async () => {
 .title-row h1 {
   margin: 0;
 }
+.header-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
 .app-logo {
   width: 34px;
   height: 34px;
@@ -2878,6 +2912,19 @@ onMounted(async () => {
   max-height: calc(100vh - 40px);
   overflow: auto;
   background: #ffffff;
+}
+.about-modal {
+  width: min(620px, 100%);
+  background: #ffffff;
+  display: grid;
+  gap: 8px;
+}
+.about-modal h2 {
+  margin: 0;
+}
+.about-modal p {
+  margin: 0;
+  color: #18384f;
 }
 .details-modal-actions {
   display: flex;
