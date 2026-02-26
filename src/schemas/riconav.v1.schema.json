@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ric-o-navigator.local/schemas/riconav.v1.schema.json",
+  "title": "RiC Navigator Graph File v1",
+  "type": "object",
+  "required": ["version", "exportedAt", "nodes", "edges", "layouts"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "exportedAt": {
+      "type": "string"
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "classIri", "label"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "classIri": { "type": "string", "minLength": 1 },
+          "label": { "type": "string" },
+          "shortLabel": { "type": "string" },
+          "nodeType": {
+            "type": "string",
+            "enum": ["class", "literal", "text"]
+          },
+          "textStyle": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "bold": { "type": "boolean" },
+              "italic": { "type": "boolean" },
+              "underline": { "type": "boolean" },
+              "fontSize": { "type": "number", "minimum": 10, "maximum": 28 },
+              "textColor": { "type": "string" },
+              "backgroundColor": { "type": "string" },
+              "textAlign": {
+                "type": "string",
+                "enum": ["left", "center", "right"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "sourceId", "targetId", "label"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "sourceId": { "type": "string", "minLength": 1 },
+          "targetId": { "type": "string", "minLength": 1 },
+          "propertyIri": { "type": "string" },
+          "label": { "type": "string" },
+          "shortLabel": { "type": "string" },
+          "sourceLabel": { "type": "string" },
+          "targetLabel": { "type": "string" }
+        }
+      }
+    },
+    "layouts": {
+      "type": "object",
+      "required": ["nodes"],
+      "additionalProperties": false,
+      "properties": {
+        "nodes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["x", "y"],
+            "additionalProperties": false,
+            "properties": {
+              "x": { "type": "number" },
+              "y": { "type": "number" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

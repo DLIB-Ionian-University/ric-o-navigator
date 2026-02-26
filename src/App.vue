@@ -139,6 +139,11 @@
             <section class="playground-controls">
               <h3>Create graph</h3>
               <p class="playground-hint">Add classes as nodes, then connect them with RiC-O properties.</p>
+              <div class="playground-action-row graph-io-row">
+                <button type="button" class="secondary-btn export-btn" :disabled="!hasPlaygroundGraph" @click="exportPlaygroundJson">Save Graph</button>
+                <button type="button" class="secondary-btn export-btn" @click="openPlaygroundImportDialog">Import Graph</button>
+                <input ref="playgroundImportInputRef" type="file" accept=".riconav" class="playground-file-input" @change="onPlaygroundImportFileChange" />
+              </div>
 
               <div class="playground-control-group">
                 <label for="playground-class-select">Class/Literal</label>
@@ -165,49 +170,62 @@
                 </div>
               </div>
 
+              <div class="playground-action-row">
+                <button type="button" class="secondary-btn" @click="addPlaygroundTextNode">Add text node</button>
+              </div>
+
               <div class="playground-control-group">
                 <label for="playground-source-select">Source node</label>
-                <select id="playground-source-select" v-model="playgroundEdgeSourceId">
-                  <option value="">No source selected</option>
-                  <option v-for="node in playgroundNodes" :key="`source-${node.id}`" :value="node.id">
-                    {{ node.id }} - {{ node.label }}
-                  </option>
-                </select>
+                <LocalVueSelect
+                  id="playground-source-select"
+                  v-model="playgroundEdgeSourceId"
+                  :options="playgroundSourceSelectOptions"
+                  placeholder="No source selected"
+                />
               </div>
 
               <div class="playground-control-group">
                 <label for="playground-property-select">Property</label>
                 <div class="playground-action-row">
-                  <select id="playground-property-select" v-model="playgroundSelectedPropertyIri">
-                    <option value="" disabled>Select property</option>
-                    <optgroup v-for="group in playgroundPropertyGroups" :key="group.label" :label="group.label">
-                      <option v-for="prop in group.options" :key="prop.iri" :value="prop.iri">
-                        {{ prop.label }}
-                      </option>
-                    </optgroup>
-                  </select>
-                  <button
-                    v-if="playgroundSelectedPropertyForInfo"
-                    type="button"
-                    class="icon-btn info-icon-btn"
-                    title="Show property details"
-                    aria-label="Show property details"
-                    @click="openPlaygroundPropertyInfo"
-                  >
-                    i
-                  </button>
+                  <LocalVueSelect
+                    id="playground-property-select"
+                    v-model="playgroundSelectedPropertyIri"
+                    :groups="playgroundPropertySelectGroups"
+                    placeholder="Select property"
+                  />
+                  <div class="playground-action-buttons">
+                    <button
+                      v-if="playgroundSelectedPropertyForInfo"
+                      type="button"
+                      class="icon-btn info-icon-btn"
+                      title="Show property details"
+                      aria-label="Show property details"
+                      @click="openPlaygroundPropertyInfo"
+                    >
+                      i
+                    </button>
+                    <button
+                      type="button"
+                      class="icon-btn info-icon-btn"
+                      title="Swap source and target"
+                      aria-label="Swap source and target"
+                      @click="swapPlaygroundEdgeEndpoints"
+                    >
+                      ⇄
+                    </button>
+                  </div>
                 </div>
               </div>
 
               <div class="playground-control-group">
                 <label for="playground-target-select">Target node</label>
                 <div class="playground-action-row">
-                  <select id="playground-target-select" v-model="playgroundEdgeTargetId">
-                    <option value="">No target selected</option>
-                    <option v-for="node in playgroundNodes" :key="`target-${node.id}`" :value="node.id">
-                      {{ node.id }} - {{ node.label }}
-                    </option>
-                  </select>
+                  <LocalVueSelect
+                    id="playground-target-select"
+                    v-model="playgroundEdgeTargetId"
+                    :options="playgroundTargetSelectOptions"
+                    placeholder="No target selected"
+                  />
                   <button type="button" class="secondary-btn" @click="addPlaygroundEdge">Add edge</button>
                 </div>
               </div>
@@ -224,28 +242,40 @@
               <p v-if="playgroundError" class="error">{{ playgroundError }}</p>
 
               <div class="playground-list">
-                <h4>Nodes ({{ playgroundNodes.length }})</h4>
-                <ul v-if="playgroundNodes.length">
-                  <li v-for="node in playgroundNodes" :key="`list-${node.id}`">
-                    <span>{{ node.id }}: {{ node.label }}</span>
-                    <button
-                      type="button"
-                      class="icon-btn delete-icon-btn"
-                      title="Delete node"
-                      aria-label="Delete node"
-                      @click="removePlaygroundNode(node.id)"
-                    >
-                      X
-                    </button>
+                <h4>Node</h4>
+                <ul v-if="playgroundSelectedNodes.length">
+                  <li v-for="node in playgroundSelectedNodes" :key="`list-${node.id}`">
+                    <span>{{ isTextPlaygroundNode(node) ? `Text Node (${node.id})` : `${node.id}: ${node.label}` }}</span>
+                    <div class="playground-list-actions">
+                      <button
+                        v-if="isTextPlaygroundNode(node)"
+                        type="button"
+                        class="icon-btn delete-icon-btn text-config-btn"
+                        title="Configure text node"
+                        aria-label="Configure text node"
+                        @click="openTextStyleToolkit(node.id)"
+                      >
+                        ⚙
+                      </button>
+                      <button
+                        type="button"
+                        class="icon-btn delete-icon-btn"
+                        title="Delete node"
+                        aria-label="Delete node"
+                        @click="removePlaygroundNode(node.id)"
+                      >
+                        X
+                      </button>
+                    </div>
                   </li>
                 </ul>
-                <p v-else>No nodes yet.</p>
+                <p v-else>No selected node.</p>
               </div>
 
               <div class="playground-list">
-                <h4>Edges ({{ playgroundEdges.length }})</h4>
-                <ul v-if="playgroundEdges.length">
-                  <li v-for="edge in playgroundEdges" :key="`edge-${edge.id}`">
+                <h4>Edge</h4>
+                <ul v-if="playgroundSelectedEdges.length">
+                  <li v-for="edge in playgroundSelectedEdges" :key="`edge-${edge.id}`">
                     <span>{{ edge.sourceId }}:{{ edge.sourceLabel }} -{{ edge.label }}→ {{ edge.targetId }}:{{ edge.targetLabel }}</span>
                     <button
                       type="button"
@@ -258,11 +288,11 @@
                     </button>
                   </li>
                 </ul>
-                <p v-else>No edges yet.</p>
+                <p v-else>No selected edge.</p>
               </div>
             </section>
 
-            <section class="playground-canvas">
+            <section class="playground-canvas" @click.capture="onPlaygroundCanvasClick">
               <div class="playground-canvas-toolbar">
                 <button type="button" class="icon-btn zoom-btn" title="Zoom out" aria-label="Zoom out" @click="zoomOutPlayground">-</button>
                 <span class="zoom-label">{{ Math.round(playgroundZoom * 100) }}%</span>
@@ -277,12 +307,35 @@
                 :edges="playgroundNetworkEdges"
                 v-model:layouts="playgroundNetworkLayouts"
                 v-model:zoom-level="playgroundZoom"
+                v-model:selected-edges="playgroundSelectedEdgeIds"
                 :configs="playgroundNetworkConfigs"
+                @node:click="onPlaygroundNodeClick"
+                @view:click="onPlaygroundViewClick"
+                @edge:click="onPlaygroundEdgeClick"
+                @edge:select="onPlaygroundEdgeSelect"
               >
                 <template #override-node-label="{ nodeId, x, y, textAnchor, dominantBaseline }">
-                  <text :x="x" :y="y" :text-anchor="textAnchor" :dominant-baseline="dominantBaseline">
-                    <tspan class="playground-node-title-label">{{ playgroundNodeLabelById[nodeId]?.title ?? '' }}</tspan>
-                    <tspan x="0" dy="12" class="playground-node-id-label">{{ playgroundNodeLabelById[nodeId]?.id ?? '' }}</tspan>
+                  <text :x="x" :y="y" :text-anchor="textAnchor" :dominant-baseline="dominantBaseline" @click.stop="selectPlaygroundNode(nodeId)">
+                    <tspan
+                      v-for="(line, lineIndex) in playgroundNodeTitleLines(nodeId)"
+                      :key="`${nodeId}-line-${lineIndex}`"
+                      class="playground-node-title-label"
+                      :x="playgroundNodeTextX(nodeId, x)"
+                      :text-anchor="playgroundNodeTextAnchor(nodeId)"
+                      :dy="lineIndex === 0 ? 0 : 14"
+                      :style="{
+                        fill: playgroundNodeLabelById[nodeId]?.style?.textColor ?? '#0f3047',
+                        fontWeight: playgroundNodeLabelById[nodeId]?.style?.bold ? '700' : '500',
+                        fontStyle: playgroundNodeLabelById[nodeId]?.style?.italic ? 'italic' : 'normal',
+                        textDecoration: playgroundNodeLabelById[nodeId]?.style?.underline ? 'underline' : 'none',
+                        fontSize: `${playgroundNodeLabelById[nodeId]?.style?.fontSize ?? 12}px`
+                      }"
+                    >
+                      {{ line }}
+                    </tspan>
+                    <tspan v-if="!playgroundNodeLabelById[nodeId]?.isText" :x="x" dy="12" class="playground-node-id-label">
+                      {{ playgroundNodeLabelById[nodeId]?.id ?? '' }}
+                    </tspan>
                   </text>
                 </template>
                 <template #edge-label="{ edgeId, area }">
@@ -301,6 +354,80 @@
           </div>
         </article>
       </section>
+
+      <div v-if="textStyleNodeId" class="details-modal-backdrop" @click.self="closeTextStyleToolkit">
+        <article class="details-card text-style-modal">
+          <div class="details-modal-actions">
+            <button type="button" class="icon-btn close-btn" @click="closeTextStyleToolkit" title="Close text style">✕</button>
+          </div>
+          <h3>Text Node Style</h3>
+          <label class="playground-inline-field text-style-text-field">
+            <span>Text</span>
+            <textarea v-model="textStyleDraftText" rows="4" maxlength="500"></textarea>
+          </label>
+          <label class="playground-inline-field">
+            <span>Alignment</span>
+            <div class="alignment-toggle-row">
+              <button
+                type="button"
+                :class="['mini-toggle-btn', { active: textStyleDraft.textAlign === 'left' }]"
+                title="Align left"
+                aria-label="Align left"
+                @click="textStyleDraft.textAlign = 'left'"
+              >
+                <TextAlignStart class="alignment-icon" />
+              </button>
+              <button
+                type="button"
+                :class="['mini-toggle-btn', { active: textStyleDraft.textAlign === 'center' }]"
+                title="Align center"
+                aria-label="Align center"
+                @click="textStyleDraft.textAlign = 'center'"
+              >
+                <TextAlignCenter class="alignment-icon" />
+              </button>
+              <button
+                type="button"
+                :class="['mini-toggle-btn', { active: textStyleDraft.textAlign === 'right' }]"
+                title="Align right"
+                aria-label="Align right"
+                @click="textStyleDraft.textAlign = 'right'"
+              >
+                <TextAlignEnd class="alignment-icon" />
+              </button>
+            </div>
+          </label>
+          <div class="text-style-grid">
+            <label class="playground-check">
+              <input v-model="textStyleDraft.bold" type="checkbox" />
+              <span>Bold</span>
+            </label>
+            <label class="playground-check">
+              <input v-model="textStyleDraft.italic" type="checkbox" />
+              <span>Italic</span>
+            </label>
+            <label class="playground-check">
+              <input v-model="textStyleDraft.underline" type="checkbox" />
+              <span>Underline</span>
+            </label>
+            <label class="playground-inline-field">
+              <span>Size</span>
+              <input v-model.number="textStyleDraft.fontSize" type="number" min="10" max="28" />
+            </label>
+            <label class="playground-inline-field">
+              <span>Text color</span>
+              <input v-model="textStyleDraft.textColor" type="color" />
+            </label>
+            <label class="playground-inline-field">
+              <span>Background</span>
+              <input v-model="textStyleDraft.backgroundColor" type="color" />
+            </label>
+          </div>
+          <div class="playground-action-row">
+            <button type="button" class="secondary-btn" @click="applyTextStyleToolkit">Apply</button>
+          </div>
+        </article>
+      </div>
 
       <div v-if="activeDetailsKind" class="details-modal-backdrop" @click.self="closeDetailsModal">
         <article class="details-card details-modal">
@@ -654,9 +781,13 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import Ajv2020 from 'ajv/dist/2020';
+import type { ValidateFunction } from 'ajv';
+import { TextAlignCenter, TextAlignEnd, TextAlignStart } from 'lucide-vue-next';
 import RicoClassTreeNode from './components/RicoClassTreeNode.vue';
 import LocalVueSelect from './components/LocalVueSelect.vue';
 import type { UserConfigs, VNetworkGraphInstance } from 'v-network-graph';
+import riconavV1Schema from './schemas/riconav.v1.schema.json';
 
 type TabKey = 'classes' | 'tree' | 'data-properties' | 'object-properties' | 'playground';
 type DetailsKind = 'class' | 'data' | 'object' | '';
@@ -750,6 +881,8 @@ type PlaygroundNode = {
   classIri: string;
   label: string;
   shortLabel: string;
+  nodeType?: 'class' | 'literal' | 'text';
+  textStyle?: PlaygroundTextStyle;
 };
 
 type PlaygroundEdge = {
@@ -763,12 +896,6 @@ type PlaygroundEdge = {
   targetLabel: string;
 };
 
-type PlaygroundPropertyOption = {
-  iri: string;
-  label: string;
-  kind: 'object' | 'data';
-};
-
 type PlaygroundPropertyInfo = {
   iri: string;
   label: string;
@@ -776,7 +903,32 @@ type PlaygroundPropertyInfo = {
   kind: 'object' | 'data';
 };
 
+type PlaygroundGraphExport = {
+  version: number;
+  exportedAt: string;
+  nodes: PlaygroundNode[];
+  edges: PlaygroundEdge[];
+  layouts: { nodes: Record<string, { x: number; y: number }> };
+};
+
+type PlaygroundTextStyle = {
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+  fontSize: number;
+  textColor: string;
+  backgroundColor: string;
+  textAlign: 'left' | 'center' | 'right';
+};
+
 const LITERAL_NODE_IRI = '__literal__';
+const TEXT_NODE_IRI = '__text__';
+const RICONAV_FILE_EXTENSION = '.riconav';
+
+const ajv = new Ajv2020({ allErrors: true, strict: false });
+const riconavValidatorsByVersion: Record<number, ValidateFunction> = {
+  1: ajv.compile(riconavV1Schema)
+};
 
 const activeTab = ref<TabKey>('classes');
 const activeDetailsKind = ref<DetailsKind>('');
@@ -827,14 +979,46 @@ const playgroundEdges = ref<PlaygroundEdge[]>([]);
 const playgroundError = ref('');
 const playgroundNodeCounter = ref(1);
 const playgroundEdgeCounter = ref(1);
+const textStyleNodeId = ref('');
+const textStyleDraftText = ref('');
+const selectedPlaygroundNodeId = ref('');
+const selectedPlaygroundEdgeId = ref('');
+const playgroundSelectedEdgeIds = ref<string[]>([]);
+const ignoreNextViewClick = ref(false);
+const textStyleDraft = ref<PlaygroundTextStyle>({
+  bold: true,
+  italic: false,
+  underline: false,
+  fontSize: 12,
+  textColor: '#0f3047',
+  backgroundColor: '#e6f2fb',
+  textAlign: 'center'
+});
 
 const playgroundBaseWidth = 960;
 const playgroundBaseHeight = 560;
 const playgroundGraphRef = ref<VNetworkGraphInstance | null>(null);
+const playgroundImportInputRef = ref<HTMLInputElement | null>(null);
 const playgroundZoom = ref(1);
 const appBaseUrl = import.meta.env.BASE_URL;
 const appLogoUrl = `${appBaseUrl}rico-logo.svg`;
 const dataJsonUrl = `${appBaseUrl}rico-data.json`;
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+const parseAndValidateRiconav = (content: string) => {
+  const payload = JSON.parse(content) as unknown;
+  if (!isRecord(payload) || typeof payload.version !== 'number') {
+    throw new Error('This file format is not supported.');
+  }
+  const validator = riconavValidatorsByVersion[payload.version];
+  if (!validator) {
+    throw new Error(`This file format is not supported (version ${String(payload.version)}).`);
+  }
+  if (!validator(payload)) {
+    throw new Error('This file format is not supported.');
+  }
+  return payload as PlaygroundGraphExport;
+};
 
 const localName = (iri: string) => {
   const hash = iri.lastIndexOf('#');
@@ -889,6 +1073,74 @@ const sortByLabel = <T extends { label: string }>(rows: T[]) =>
   [...rows].sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
 
 const trimLabel = (text: string, max = 24) => (text.length <= max ? text : text.slice(0, max - 1) + '…');
+const isTextPlaygroundNode = (node: PlaygroundNode) => node.nodeType === 'text' || node.classIri === TEXT_NODE_IRI;
+const defaultNodeTextStyle = (): PlaygroundTextStyle => ({
+  bold: true,
+  italic: false,
+  underline: false,
+  fontSize: 12,
+  textColor: '#0f3047',
+  backgroundColor: '#e6f2fb',
+  textAlign: 'center'
+});
+const defaultTextNodeStyle = (): PlaygroundTextStyle => ({
+  ...defaultNodeTextStyle(),
+  backgroundColor: '#ffffff'
+});
+const normalizeNodeTextStyle = (style?: Partial<PlaygroundTextStyle>): PlaygroundTextStyle => {
+  const base = defaultNodeTextStyle();
+  return {
+    bold: typeof style?.bold === 'boolean' ? style.bold : base.bold,
+    italic: typeof style?.italic === 'boolean' ? style.italic : base.italic,
+    underline: typeof style?.underline === 'boolean' ? style.underline : base.underline,
+    fontSize: typeof style?.fontSize === 'number' && style.fontSize >= 10 && style.fontSize <= 28 ? style.fontSize : base.fontSize,
+    textColor: typeof style?.textColor === 'string' ? style.textColor : base.textColor,
+    backgroundColor: typeof style?.backgroundColor === 'string' ? style.backgroundColor : base.backgroundColor,
+    textAlign: style?.textAlign === 'left' || style?.textAlign === 'right' || style?.textAlign === 'center' ? style.textAlign : base.textAlign
+  };
+};
+const textNodeLines = (text: string) => {
+  const lines = text.split(/\r?\n/);
+  return lines.length ? lines : [''];
+};
+const playgroundNodeRenderData = (node: PlaygroundNode) => {
+  const style = normalizeNodeTextStyle(node.textStyle);
+  const isText = isTextPlaygroundNode(node);
+  const isSelected = selectedPlaygroundNodeId.value === node.id;
+  const title = isText ? node.label : node.shortLabel || node.label;
+  const lines = textNodeLines(title);
+  const maxLineLength = lines.reduce((max, line) => Math.max(max, line.length), 0);
+  const estimatedWidth = isText
+    ? Math.max(90, Math.min(740, Math.round(maxLineLength * style.fontSize * 0.6 + 24)))
+    : Math.max(108, Math.min(360, Math.round(title.length * style.fontSize * 0.62 + 26)));
+  const baseStrokeWidth = isText ? 1 : 1.3;
+  const estimatedHeight = isText
+    ? Math.max(34, Math.round(lines.length * style.fontSize * 1.35 + 16))
+    : 44;
+  return {
+    name: isText ? title : `${title}\n${node.id.toLowerCase()}`,
+    fullName: node.label,
+    boxWidth: estimatedWidth,
+    boxHeight: estimatedHeight,
+    bgColor: style.backgroundColor,
+    strokeColor: isSelected ? '#1f5b84' : isText ? 'transparent' : '#3f749a',
+    strokeWidth: isSelected ? baseStrokeWidth + 1.4 : isText ? 0 : baseStrokeWidth,
+    strokeDasharray: isText ? '4 3' : '0',
+    textStyle: style,
+    isText
+  };
+};
+const playgroundEdgeRenderData = (edge: PlaygroundEdge) => {
+  const isSelected = selectedPlaygroundEdgeId.value === edge.id;
+  return {
+    source: edge.sourceId,
+    target: edge.targetId,
+    name: edge.label,
+    width: isSelected ? 3.4 : 2,
+    color: isSelected ? '#1f5b84' : '#2f5e84',
+    dasharray: 0
+  };
+};
 
 const playgroundClassHierarchyOptions = computed(() => {
   const nodes = visibleClasses.value.map((cls) => ({
@@ -969,6 +1221,35 @@ const playgroundSelectedSourceNode = computed(() =>
 const playgroundSelectedTargetNode = computed(() =>
   playgroundNodes.value.find((node) => node.id === playgroundEdgeTargetId.value) ?? null
 );
+const playgroundEdgeSelectableNodes = computed(() => playgroundNodes.value.filter((node) => !isTextPlaygroundNode(node)));
+const playgroundSourceSelectOptions = computed(() => {
+  const rows = playgroundEdgeSelectableNodes.value
+    .filter((node) => node.id !== playgroundEdgeTargetId.value)
+    .map((node) => ({ iri: node.id, displayLabel: `${node.id} - ${node.label}` }));
+  return [{ iri: '', displayLabel: 'No source selected' }, ...rows];
+});
+const playgroundTargetSelectOptions = computed(() => {
+  const rows = playgroundEdgeSelectableNodes.value
+    .filter((node) => node.id !== playgroundEdgeSourceId.value)
+    .map((node) => ({ iri: node.id, displayLabel: `${node.id} - ${node.label}` }));
+  return [{ iri: '', displayLabel: 'No target selected' }, ...rows];
+});
+const playgroundPropertySelectGroups = computed(() => {
+  const objectOptions = playgroundPropertyOptions.value
+    .filter((prop) => prop.kind === 'object')
+    .map((prop) => ({ iri: prop.iri, displayLabel: prop.label }));
+  const dataOptions = playgroundPropertyOptions.value
+    .filter((prop) => prop.kind === 'data')
+    .map((prop) => ({ iri: prop.iri, displayLabel: prop.label }));
+  const groups: { label: string; options: { iri: string; displayLabel: string }[] }[] = [];
+  if (objectOptions.length) groups.push({ label: 'Object properties', options: objectOptions });
+  if (dataOptions.length) groups.push({ label: 'Data properties', options: dataOptions });
+  return groups;
+});
+const playgroundSelectedNodes = computed(() => {
+  const node = playgroundNodes.value.find((item) => item.id === selectedPlaygroundNodeId.value);
+  return node ? [node] : [];
+});
 
 const classMatchesIriConstraint = (selectedClassIri: string, constraints: string[]) => {
   if (!constraints.length) return false;
@@ -985,11 +1266,12 @@ const playgroundPropertyOptions = computed(() => {
   const targetNode = playgroundSelectedTargetNode.value;
 
   if (sourceNode) {
-    if (sourceNode.classIri === LITERAL_NODE_IRI) return [];
+    if (sourceNode.classIri === LITERAL_NODE_IRI || isTextPlaygroundNode(sourceNode)) return [];
     rows = rows.filter((prop) => classMatchesIriConstraint(sourceNode.classIri, prop.domains));
   }
 
   if (targetNode) {
+    if (isTextPlaygroundNode(targetNode)) return [];
     if (targetNode.classIri === LITERAL_NODE_IRI) {
       rows = rows.filter((prop) => prop.kind === 'data');
     } else {
@@ -1000,30 +1282,74 @@ const playgroundPropertyOptions = computed(() => {
   return sortByLabel(rows.map((prop) => ({ iri: prop.iri, label: prop.label || localName(prop.iri), kind: prop.kind })));
 });
 
-const playgroundPropertyGroups = computed(() => {
-  const objectOptions = playgroundPropertyOptions.value.filter((prop) => prop.kind === 'object');
-  const dataOptions = playgroundPropertyOptions.value.filter((prop) => prop.kind === 'data');
-  const groups: { label: string; options: PlaygroundPropertyOption[] }[] = [];
-  if (objectOptions.length) groups.push({ label: 'Object properties', options: objectOptions });
-  if (dataOptions.length) groups.push({ label: 'Data properties', options: dataOptions });
-  return groups;
-});
-
 const playgroundNetworkNodes = computed(() =>
-  Object.fromEntries(
-    playgroundNodes.value.map((node) => [node.id, { name: `${node.shortLabel}\n${node.id.toLowerCase()}`, fullName: node.label }])
-  )
+  Object.fromEntries(playgroundNodes.value.map((node) => [node.id, playgroundNodeRenderData(node)]))
 );
 const playgroundNodeLabelById = computed(() =>
-  Object.fromEntries(playgroundNodes.value.map((node) => [node.id, { title: node.shortLabel, id: node.id.toLowerCase() }]))
+  Object.fromEntries(
+    playgroundNodes.value.map((node) => [
+      node.id,
+      {
+        title: isTextPlaygroundNode(node) ? node.label : node.shortLabel,
+        id: node.id.toLowerCase(),
+        style: normalizeNodeTextStyle(node.textStyle),
+        isText: isTextPlaygroundNode(node)
+      }
+    ])
+  )
 );
 
-const playgroundNetworkEdges = computed(() =>
-  Object.fromEntries(playgroundEdges.value.map((edge) => [edge.id, { source: edge.sourceId, target: edge.targetId, name: edge.label }]))
-);
+const playgroundNetworkEdges = computed(() => Object.fromEntries(playgroundEdges.value.map((edge) => [edge.id, playgroundEdgeRenderData(edge)])));
 const playgroundEdgeLabelById = computed(() => Object.fromEntries(playgroundEdges.value.map((edge) => [edge.id, edge.label])));
+const playgroundSelectedEdges = computed(() => {
+  const edge = playgroundEdges.value.find((item) => item.id === selectedPlaygroundEdgeId.value);
+  return edge ? [edge] : [];
+});
 
 const playgroundNetworkLayouts = ref<{ nodes: Record<string, { x: number; y: number }> }>({ nodes: {} });
+const doNodeBoxesOverlap = (
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number },
+  margin = 26
+) =>
+  Math.abs(a.x - b.x) < (a.width + b.width) / 2 + margin && Math.abs(a.y - b.y) < (a.height + b.height) / 2 + margin;
+const findNonOverlappingNodePosition = (
+  node: PlaygroundNode,
+  allNodes: PlaygroundNode[],
+  placedLayouts: Record<string, { x: number; y: number }>
+) => {
+  const center = { x: playgroundBaseWidth / 2, y: playgroundBaseHeight / 2 };
+  const candidateRender = playgroundNodeRenderData(node);
+  const nodeById = new Map(allNodes.map((item) => [item.id, item]));
+  const hasCollision = (x: number, y: number) => {
+    const a = { x, y, width: candidateRender.boxWidth, height: candidateRender.boxHeight };
+    for (const [otherId, otherPos] of Object.entries(placedLayouts)) {
+      if (otherId === node.id) continue;
+      const otherNode = nodeById.get(otherId);
+      if (!otherNode) continue;
+      const otherRender = playgroundNodeRenderData(otherNode);
+      const b = { x: otherPos.x, y: otherPos.y, width: otherRender.boxWidth, height: otherRender.boxHeight };
+      if (doNodeBoxesOverlap(a, b)) return true;
+    }
+    return false;
+  };
+
+  if (!hasCollision(center.x, center.y)) return center;
+
+  const radiusStep = 46;
+  const ringCount = 120;
+  for (let ring = 1; ring <= ringCount; ring += 1) {
+    const radius = ring * radiusStep;
+    const points = Math.max(16, Math.ceil((Math.PI * 2 * radius) / 40));
+    for (let i = 0; i < points; i += 1) {
+      const angle = (i / points) * Math.PI * 2;
+      const x = center.x + Math.cos(angle) * radius;
+      const y = center.y + Math.sin(angle) * radius;
+      if (!hasCollision(x, y)) return { x, y };
+    }
+  }
+  return center;
+};
 
 watch(
   playgroundNodes,
@@ -1035,13 +1361,20 @@ watch(
     }
     for (const node of nodes) {
       if (!next[node.id]) {
-        next[node.id] = { x: playgroundBaseWidth / 2, y: playgroundBaseHeight / 2 };
+        next[node.id] = findNonOverlappingNodePosition(node, nodes, next);
       }
     }
     playgroundNetworkLayouts.value = { nodes: next };
   },
   { deep: true, immediate: true }
 );
+watch(playgroundSelectedEdgeIds, (ids) => {
+  const edgeId = pickFirstExistingEdgeId(ids);
+  selectedPlaygroundEdgeId.value = edgeId;
+  if (edgeId) {
+    selectedPlaygroundNodeId.value = '';
+  }
+});
 
 const playgroundNetworkConfigs: UserConfigs = {
   view: {
@@ -1055,23 +1388,25 @@ const playgroundNetworkConfigs: UserConfigs = {
   node: {
     normal: {
       type: 'rect',
-      width: 140,
-      height: 44,
-      borderRadius: 10,
-      radius: 10,
-      color: '#e6f2fb',
-      strokeColor: '#3f749a',
-      strokeWidth: 1.3
+      width: (n: any) => n.boxWidth,
+      height: (n: any) => n.boxHeight,
+      borderRadius: (n: any) => (n.isText ? 0 : 10),
+      radius: (n: any) => (n.isText ? 0 : 10),
+      color: (n: any) => n.bgColor,
+      strokeColor: (n: any) => n.strokeColor,
+      strokeWidth: (n: any) => n.strokeWidth,
+      strokeDasharray: (n: any) => n.strokeDasharray
     },
     hover: {
       type: 'rect',
-      width: 140,
-      height: 44,
-      borderRadius: 10,
-      radius: 10,
-      color: '#e6f2fb',
-      strokeColor: '#3f749a',
-      strokeWidth: 1.3
+      width: (n: any) => n.boxWidth,
+      height: (n: any) => n.boxHeight,
+      borderRadius: (n: any) => (n.isText ? 0 : 10),
+      radius: (n: any) => (n.isText ? 0 : 10),
+      color: (n: any) => n.bgColor,
+      strokeColor: (n: any) => n.strokeColor,
+      strokeWidth: (n: any) => n.strokeWidth,
+      strokeDasharray: (n: any) => n.strokeDasharray
     },
     draggable: true,
     selectable: false,
@@ -1086,12 +1421,12 @@ const playgroundNetworkConfigs: UserConfigs = {
     }
   },
   edge: {
-    selectable: false,
+    selectable: true,
     type: 'straight',
     normal: {
-      width: 2,
-      color: '#2f5e84',
-      dasharray: 0,
+      width: (e: any) => e.width,
+      color: (e: any) => e.color,
+      dasharray: (e: any) => e.dasharray,
       linecap: 'round',
       animate: false,
       animationSpeed: 50
@@ -1528,6 +1863,16 @@ watch(playgroundPropertyOptions, (options) => {
     playgroundSelectedPropertyIri.value = '';
   }
 });
+watch(playgroundSourceSelectOptions, (options) => {
+  if (!options.some((option) => option.iri === playgroundEdgeSourceId.value)) {
+    playgroundEdgeSourceId.value = '';
+  }
+});
+watch(playgroundTargetSelectOptions, (options) => {
+  if (!options.some((option) => option.iri === playgroundEdgeTargetId.value)) {
+    playgroundEdgeTargetId.value = '';
+  }
+});
 
 const addPlaygroundNode = () => {
   playgroundError.value = '';
@@ -1543,7 +1888,9 @@ const addPlaygroundNode = () => {
           id: nodeId,
           classIri: LITERAL_NODE_IRI,
           label: 'Literal',
-          shortLabel: 'Literal'
+          shortLabel: 'Literal',
+          nodeType: 'literal',
+          textStyle: defaultNodeTextStyle()
         }
       : (() => {
           const cls = classesByIri.value.get(playgroundSelectedClassIri.value);
@@ -1555,14 +1902,44 @@ const addPlaygroundNode = () => {
             id: nodeId,
             classIri: cls.iri,
             label: cls.label || localName(cls.iri),
-            shortLabel: trimLabel(cls.label || localName(cls.iri), 20)
+            shortLabel: trimLabel(cls.label || localName(cls.iri), 20),
+            nodeType: 'class',
+            textStyle: defaultNodeTextStyle()
           };
         })();
   if (!node) return;
   playgroundNodes.value = [...playgroundNodes.value, node];
 };
 
+const addPlaygroundTextNode = () => {
+  playgroundError.value = '';
+  const text = 'Add text';
+  const nodeId = `n${playgroundNodeCounter.value++}`;
+  const node: PlaygroundNode = {
+    id: nodeId,
+    classIri: TEXT_NODE_IRI,
+    label: text,
+    shortLabel: text,
+    nodeType: 'text',
+    textStyle: defaultTextNodeStyle()
+  };
+  playgroundNodes.value = [...playgroundNodes.value, node];
+};
+
 const removePlaygroundNode = (nodeId: string) => {
+  if (textStyleNodeId.value === nodeId) {
+    textStyleNodeId.value = '';
+    textStyleDraftText.value = '';
+  }
+  if (selectedPlaygroundNodeId.value === nodeId) {
+    selectedPlaygroundNodeId.value = '';
+  }
+  const removedEdgeIds = new Set(
+    playgroundEdges.value.filter((edge) => edge.sourceId === nodeId || edge.targetId === nodeId).map((edge) => edge.id)
+  );
+  if (selectedPlaygroundEdgeId.value && removedEdgeIds.has(selectedPlaygroundEdgeId.value)) {
+    selectedPlaygroundEdgeId.value = '';
+  }
   playgroundNodes.value = playgroundNodes.value.filter((node) => node.id !== nodeId);
   playgroundEdges.value = playgroundEdges.value.filter((edge) => edge.sourceId !== nodeId && edge.targetId !== nodeId);
 
@@ -1596,6 +1973,10 @@ const addPlaygroundEdge = () => {
     playgroundError.value = 'Could not resolve the selected graph items.';
     return;
   }
+  if (isTextPlaygroundNode(sourceNode) || isTextPlaygroundNode(targetNode)) {
+    playgroundError.value = 'Text nodes cannot be used as source or target for properties.';
+    return;
+  }
 
   const isPropertyAllowed = playgroundPropertyOptions.value.some((option) => option.iri === prop.iri);
   if (!isPropertyAllowed) {
@@ -1626,7 +2007,141 @@ const addPlaygroundEdge = () => {
 };
 
 const removePlaygroundEdge = (edgeId: string) => {
+  if (selectedPlaygroundEdgeId.value === edgeId) {
+    selectedPlaygroundEdgeId.value = '';
+  }
+  playgroundSelectedEdgeIds.value = playgroundSelectedEdgeIds.value.filter((id) => id !== edgeId);
   playgroundEdges.value = playgroundEdges.value.filter((edge) => edge.id !== edgeId);
+};
+const swapPlaygroundEdgeEndpoints = () => {
+  const source = playgroundEdgeSourceId.value;
+  const target = playgroundEdgeTargetId.value;
+  playgroundEdgeSourceId.value = target;
+  playgroundEdgeTargetId.value = source;
+};
+
+const selectPlaygroundNode = (nodeId: string) => {
+  selectedPlaygroundNodeId.value = playgroundNodes.value.some((item) => item.id === nodeId) ? nodeId : '';
+  selectedPlaygroundEdgeId.value = '';
+  playgroundSelectedEdgeIds.value = [];
+};
+
+const selectPlaygroundEdge = (edgeId: string) => {
+  selectedPlaygroundEdgeId.value = playgroundEdges.value.some((item) => item.id === edgeId) ? edgeId : '';
+  selectedPlaygroundNodeId.value = '';
+  playgroundSelectedEdgeIds.value = selectedPlaygroundEdgeId.value ? [selectedPlaygroundEdgeId.value] : [];
+};
+
+const playgroundNodeTitleLines = (nodeId: string) => {
+  const title = playgroundNodeLabelById.value[nodeId]?.title ?? '';
+  const lines = title.split(/\r?\n/);
+  return lines.length ? lines : [''];
+};
+const playgroundNodeTextAnchor = (nodeId: string) => {
+  const align = playgroundNodeLabelById.value[nodeId]?.style?.textAlign ?? 'center';
+  if (align === 'left') return 'start';
+  if (align === 'right') return 'end';
+  return 'middle';
+};
+const playgroundNodeTextX = (nodeId: string, x: number) => {
+  const align = playgroundNodeLabelById.value[nodeId]?.style?.textAlign ?? 'center';
+  const boxWidth = Number(playgroundNetworkNodes.value[nodeId]?.boxWidth ?? 0);
+  const pad = 10;
+  if (align === 'left') return x - boxWidth / 2 + pad;
+  if (align === 'right') return x + boxWidth / 2 - pad;
+  return x;
+};
+
+const onPlaygroundNodeClick = (payload: { node: string }) => {
+  ignoreNextViewClick.value = true;
+  selectPlaygroundNode(payload.node);
+};
+
+function pickFirstExistingEdgeId(ids: string[] = []) {
+  return ids.find((id) => playgroundEdges.value.some((item) => item.id === id)) ?? '';
+}
+
+const onPlaygroundEdgeClick = (payload: { edge?: string; edges?: string[] }) => {
+  ignoreNextViewClick.value = true;
+  const edgeId = pickFirstExistingEdgeId([payload.edge ?? '', ...(payload.edges ?? [])]);
+  if (!edgeId) return;
+  selectPlaygroundEdge(edgeId);
+};
+
+const onPlaygroundEdgeSelect = (edgeIds: string[]) => {
+  ignoreNextViewClick.value = true;
+  const edgeId = pickFirstExistingEdgeId(edgeIds);
+  if (!edgeId) return;
+  selectPlaygroundEdge(edgeId);
+};
+
+const onPlaygroundViewClick = (payload?: { event?: MouseEvent }) => {
+  if (ignoreNextViewClick.value) {
+    ignoreNextViewClick.value = false;
+    return;
+  }
+  const target = payload?.event?.target as Element | null;
+  if (!target) return;
+  if (target.closest('.playground-canvas-toolbar')) return;
+  if (target.closest('.v-ng-node') || target.closest('.v-ng-node-label')) return;
+  if (target.closest('.v-ng-edge') || target.closest('.v-ng-edge-label') || target.closest('.v-ng-line') || target.closest('.v-ng-line-background') || target.closest('.v-path')) return;
+  onPlaygroundOutsideNodeClick();
+};
+
+const onPlaygroundOutsideNodeClick = () => {
+  selectedPlaygroundNodeId.value = '';
+  selectedPlaygroundEdgeId.value = '';
+  playgroundSelectedEdgeIds.value = [];
+};
+
+const onPlaygroundCanvasClick = (event: MouseEvent) => {
+  const target = event.target as Element | null;
+  if (!target) return;
+  if (target.closest('.playground-canvas-toolbar')) return;
+  if (target.closest('.v-ng-node') || target.closest('.v-ng-node-label')) return;
+  if (target.closest('.v-ng-edge') || target.closest('.v-ng-edge-label') || target.closest('.v-ng-line') || target.closest('.v-ng-line-background') || target.closest('.v-path')) return;
+  selectedPlaygroundNodeId.value = '';
+  selectedPlaygroundEdgeId.value = '';
+  playgroundSelectedEdgeIds.value = [];
+};
+
+const openTextStyleToolkit = (nodeId: string) => {
+  const node = playgroundNodes.value.find((item) => item.id === nodeId);
+  if (!node || !isTextPlaygroundNode(node)) return;
+  textStyleNodeId.value = nodeId;
+  textStyleDraftText.value = node.label;
+  textStyleDraft.value = normalizeNodeTextStyle(node.textStyle);
+};
+
+const closeTextStyleToolkit = () => {
+  textStyleNodeId.value = '';
+  textStyleDraftText.value = '';
+  textStyleDraft.value = defaultNodeTextStyle();
+};
+
+const applyTextStyleToolkit = () => {
+  const nodeId = textStyleNodeId.value;
+  if (!nodeId) return;
+  const nextText = textStyleDraftText.value.trim() || 'Add text';
+  const normalizedStyle = normalizeNodeTextStyle(textStyleDraft.value);
+  playgroundNodes.value = playgroundNodes.value.map((node) =>
+    node.id === nodeId
+      ? {
+          ...node,
+          label: nextText,
+          shortLabel: nextText,
+          nodeType: 'text',
+          textStyle: normalizedStyle
+        }
+      : node
+  );
+  playgroundEdges.value = playgroundEdges.value.map((edge) => ({
+    ...edge,
+    sourceLabel: edge.sourceId === nodeId ? nextText : edge.sourceLabel,
+    targetLabel: edge.targetId === nodeId ? nextText : edge.targetLabel
+  }));
+  textStyleNodeId.value = '';
+  textStyleDraftText.value = '';
 };
 
 const openPlaygroundClassInfo = async () => {
@@ -1743,6 +2258,94 @@ const exportPlaygroundJpg = async () => {
   await exportPlaygroundRaster('jpg');
 };
 
+const exportPlaygroundJson = () => {
+  playgroundError.value = '';
+  try {
+    const payload: PlaygroundGraphExport = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      nodes: playgroundNodes.value,
+      edges: playgroundEdges.value,
+      layouts: playgroundNetworkLayouts.value
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+    downloadBlob(blob, `rico-playground-graph${RICONAV_FILE_EXTENSION}`);
+  } catch (err) {
+    playgroundError.value = err instanceof Error ? err.message : 'Unable to export RiCoNav file.';
+  }
+};
+
+const openPlaygroundImportDialog = () => {
+  playgroundImportInputRef.value?.click();
+};
+
+const onPlaygroundImportFileChange = async (event: Event) => {
+  playgroundError.value = '';
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+
+  try {
+    const content = await file.text();
+    const parsed = parseAndValidateRiconav(content);
+    const nodesRaw = parsed.nodes;
+    const edges = parsed.edges;
+    const layouts = parsed.layouts.nodes;
+
+    const nodes: PlaygroundNode[] = nodesRaw.map((n) => {
+      const nodeType =
+        n.classIri === LITERAL_NODE_IRI ? 'literal' : n.classIri === TEXT_NODE_IRI ? 'text' : (n.nodeType ?? 'class');
+      return {
+        id: n.id,
+        classIri: n.classIri,
+        label: n.label,
+        shortLabel: typeof n.shortLabel === 'string' ? n.shortLabel : nodeType === 'text' ? n.label : trimLabel(n.label, 20),
+        nodeType,
+        textStyle: normalizeNodeTextStyle(n.textStyle)
+      };
+    });
+
+    const nodeById = new Map(nodes.map((n) => [n.id, n]));
+    const validEdges = edges.filter((e) => nodeById.has(e.sourceId) && nodeById.has(e.targetId));
+    const hydratedEdges: PlaygroundEdge[] = validEdges.map((edge) => ({
+      ...edge,
+      sourceLabel: nodeById.get(edge.sourceId)?.label ?? edge.sourceLabel ?? edge.sourceId,
+      targetLabel: nodeById.get(edge.targetId)?.label ?? edge.targetLabel ?? edge.targetId
+    }));
+
+    const nextLayouts: Record<string, { x: number; y: number }> = {};
+    for (const node of nodes) {
+      const p = (layouts as Record<string, { x?: unknown; y?: unknown }>)[node.id];
+      if (p && typeof p.x === 'number' && typeof p.y === 'number') {
+        nextLayouts[node.id] = { x: p.x, y: p.y };
+      } else {
+        nextLayouts[node.id] = { x: playgroundBaseWidth / 2, y: playgroundBaseHeight / 2 };
+      }
+    }
+
+    playgroundNodes.value = nodes;
+    playgroundEdges.value = hydratedEdges;
+    playgroundNetworkLayouts.value = { nodes: nextLayouts };
+    playgroundEdgeSourceId.value = '';
+    playgroundEdgeTargetId.value = '';
+    playgroundSelectedPropertyIri.value = '';
+    textStyleNodeId.value = '';
+    textStyleDraftText.value = '';
+    textStyleDraft.value = defaultNodeTextStyle();
+    selectedPlaygroundNodeId.value = '';
+    selectedPlaygroundEdgeId.value = '';
+    playgroundSelectedEdgeIds.value = [];
+    ignoreNextViewClick.value = false;
+    playgroundNodeCounter.value = nodes.reduce((max, n) => Math.max(max, Number.parseInt(n.id.slice(1), 10) || 0), 0) + 1;
+    playgroundEdgeCounter.value = hydratedEdges.reduce((max, e) => Math.max(max, Number.parseInt(e.id.slice(1), 10) || 0), 0) + 1;
+    playgroundZoom.value = 1;
+  } catch (err) {
+    playgroundError.value = err instanceof Error ? err.message : 'This file format is not supported.';
+  } finally {
+    input.value = '';
+  }
+};
+
 const clearPlaygroundGraph = () => {
   playgroundNodes.value = [];
   playgroundEdges.value = [];
@@ -1751,6 +2354,13 @@ const clearPlaygroundGraph = () => {
   playgroundError.value = '';
   playgroundNodeCounter.value = 1;
   playgroundEdgeCounter.value = 1;
+  textStyleNodeId.value = '';
+  textStyleDraftText.value = '';
+  textStyleDraft.value = defaultNodeTextStyle();
+  selectedPlaygroundNodeId.value = '';
+  selectedPlaygroundEdgeId.value = '';
+  playgroundSelectedEdgeIds.value = [];
+  ignoreNextViewClick.value = false;
   playgroundNetworkLayouts.value = { nodes: {} };
   playgroundZoom.value = 1;
 };
@@ -1897,6 +2507,36 @@ onMounted(async () => {
   color: #29475e;
   font-weight: 600;
 }
+.playground-text-style-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 10px;
+}
+.playground-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.84rem;
+  font-weight: 500;
+  color: #2f4e63;
+}
+.playground-inline-field {
+  display: grid;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: #36556b;
+  font-weight: 600;
+}
+.playground-inline-field input[type='number'],
+.playground-inline-field input[type='color'],
+.playground-inline-field select {
+  height: 30px;
+  border: 1px solid #c2d4e3;
+  border-radius: 6px;
+  padding: 4px 6px;
+  box-sizing: border-box;
+  background: #fff;
+}
 .playground-control-group select {
   width: 100%;
   height: 38px;
@@ -1917,6 +2557,14 @@ onMounted(async () => {
   grid-template-columns: repeat(3, auto);
   justify-content: start;
   margin-top: 8px;
+}
+.graph-io-row {
+  grid-template-columns: repeat(2, auto);
+  justify-content: start;
+  margin-bottom: 8px;
+}
+.playground-file-input {
+  display: none;
 }
 .playground-action-buttons {
   display: inline-flex;
@@ -1976,6 +2624,11 @@ onMounted(async () => {
   padding: 7px 8px;
   background: #fbfdff;
 }
+.playground-list-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 .inline-btn {
   border: 1px solid #cfddeb;
   background: #fff;
@@ -2000,6 +2653,11 @@ onMounted(async () => {
   border-radius: 6px;
   font-size: 0.78rem;
   font-weight: 700;
+}
+.text-config-btn {
+  width: 32px;
+  height: 32px;
+  font-size: 1rem;
 }
 .playground-canvas {
   border: 1px solid #d0deea;
@@ -2096,6 +2754,37 @@ onMounted(async () => {
 .playground-edge-text-label {
   fill: #1f4f74;
   font-size: 11px;
+}
+.text-style-modal {
+  width: min(430px, 100%);
+  background: #ffffff;
+  display: grid;
+  gap: 12px;
+}
+.text-style-text-field textarea {
+  min-height: 86px;
+  border: 1px solid #c2d4e3;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+  color: #16384f;
+  background: #fff;
+  resize: vertical;
+}
+.text-style-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  align-items: end;
+}
+.alignment-toggle-row {
+  display: inline-flex;
+  gap: 6px;
+}
+.alignment-icon {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2.2;
 }
 .tree-scroll-panel {
   flex: 1;

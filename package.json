@@ -10,6 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "ajv": "^8.18.0",
+    "lucide-vue-next": "^0.575.0",
     "v-network-graph": "^0.9.22",
     "vue": "^3.5.13"
   },

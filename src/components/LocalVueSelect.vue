@@ -13,14 +13,29 @@
         placeholder="Search..."
         @click.stop
       />
-      <ul v-if="filteredOptions.length" class="vselect-list">
+      <template v-if="usingGroups">
+        <div v-if="filteredGroups.length" class="vselect-groups">
+          <div v-for="group in filteredGroups" :key="group.label" class="vselect-group">
+            <p class="vselect-group-label">{{ group.label }}</p>
+            <ul class="vselect-list">
+              <li v-for="option in group.options" :key="option.iri">
+                <button type="button" class="vselect-option" @click="selectOption(option.iri)">
+                  {{ option.displayLabel }}
+                </button>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <p v-else class="empty-state">No options found</p>
+      </template>
+      <ul v-else-if="filteredOptions.length" class="vselect-list">
         <li v-for="option in filteredOptions" :key="option.iri">
           <button type="button" class="vselect-option" @click="selectOption(option.iri)">
             {{ option.displayLabel }}
           </button>
         </li>
       </ul>
-      <p v-else class="empty-state">No classes found</p>
+      <p v-else class="empty-state">No options found</p>
     </div>
   </div>
 </template>
@@ -32,14 +47,21 @@ type SelectOption = {
   iri: string;
   displayLabel: string;
 };
+type SelectGroup = {
+  label: string;
+  options: SelectOption[];
+};
 
 const props = withDefaults(
   defineProps<{
     modelValue: string;
-    options: SelectOption[];
+    options?: SelectOption[];
+    groups?: SelectGroup[];
     placeholder?: string;
   }>(),
   {
+    options: () => [],
+    groups: () => [],
     placeholder: 'Select...'
   }
 );
@@ -52,11 +74,22 @@ const rootEl = ref<HTMLElement | null>(null);
 const isOpen = ref(false);
 const searchText = ref('');
 
-const selectedOption = computed(() => props.options.find((option) => option.iri === props.modelValue) ?? null);
+const usingGroups = computed(() => props.groups.length > 0);
+const flatOptions = computed(() => (usingGroups.value ? props.groups.flatMap((group) => group.options) : props.options));
+const selectedOption = computed(() => flatOptions.value.find((option) => option.iri === props.modelValue) ?? null);
 const filteredOptions = computed(() => {
   const q = searchText.value.trim().toLocaleLowerCase();
   if (!q) return props.options;
   return props.options.filter((option) => option.displayLabel.toLocaleLowerCase().includes(q));
+});
+const filteredGroups = computed(() => {
+  const q = searchText.value.trim().toLocaleLowerCase();
+  return props.groups
+    .map((group) => ({
+      label: group.label,
+      options: q ? group.options.filter((option) => option.displayLabel.toLocaleLowerCase().includes(q)) : group.options
+    }))
+    .filter((group) => group.options.length > 0);
 });
 
 const toggleOpen = () => {
@@ -160,6 +193,28 @@ onBeforeUnmount(() => {
 }
 .vselect-option:hover {
   background: #e9f4fc;
+}
+.vselect-groups {
+  margin-top: 8px;
+  max-height: 260px;
+  overflow: auto;
+  display: grid;
+  gap: 8px;
+}
+.vselect-group {
+  display: grid;
+  gap: 3px;
+}
+.vselect-group .vselect-list {
+  margin-top: 0;
+}
+.vselect-group-label {
+  margin: 0;
+  padding: 0 4px;
+  color: #3a5b72;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
 }
 .empty-state {
   margin: 8px 0 0;
