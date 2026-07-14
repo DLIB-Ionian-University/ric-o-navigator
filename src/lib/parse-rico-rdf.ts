@@ -8,6 +8,13 @@ export type NavigatorNamedIndividual = {
   label: string;
 };
 
+export type NavigatorPropertyRestriction = {
+  classIri: string;
+  restrictionType: string;
+  cardinality: string;
+  onClassIri: string;
+};
+
 export type NavigatorClass = {
   iri: string;
   label: string;
@@ -28,6 +35,7 @@ export type NavigatorProperty = {
   ranges: string[];
   superproperties: string[];
   subproperties: string[];
+  restrictions: NavigatorPropertyRestriction[];
 };
 
 export type NavigatorData = {
@@ -249,6 +257,7 @@ export const parseRicoRdfXml = async (xml: string, sourceFile = 'data/RiC-O_1-1.
   const propertyDomains = new Map<string, Set<string>>();
   const propertyRanges = new Map<string, Set<string>>();
   const propertySuperproperties = new Map<string, Set<string>>();
+  const propertyRestrictions = new Map<string, NavigatorPropertyRestriction[]>();
 
   for (const row of propertyRows) {
     const propertyIri = bindingValue(row, 'property');
@@ -267,6 +276,70 @@ export const parseRicoRdfXml = async (xml: string, sourceFile = 'data/RiC-O_1-1.
     addToSetMap(propertyDomains, propertyIri, bindingValue(row, 'domain'));
     addToSetMap(propertyRanges, propertyIri, bindingValue(row, 'range'));
     addToSetMap(propertySuperproperties, propertyIri, bindingValue(row, 'superproperty'));
+  }
+
+  const restrictionRows = await queryRows(
+    engine,
+    store,
+    `${PREFIXES}
+    SELECT ?class ?property ?restrictionType ?cardinality ?onClass WHERE {
+      ?class rdfs:subClassOf ?restriction .
+      FILTER(isIRI(?class))
+      ?restriction owl:onProperty ?property .
+      FILTER(isIRI(?property))
+      OPTIONAL {
+        ?restriction owl:onClass ?onClass .
+        FILTER(isIRI(?onClass))
+      }
+      {
+        ?restriction owl:minQualifiedCardinality ?cardinality .
+        BIND("minimum qualified cardinality" AS ?restrictionType)
+      }
+      UNION
+      {
+        ?restriction owl:qualifiedCardinality ?cardinality .
+        BIND("qualified cardinality" AS ?restrictionType)
+      }
+      UNION
+      {
+        ?restriction owl:maxQualifiedCardinality ?cardinality .
+        BIND("maximum qualified cardinality" AS ?restrictionType)
+      }
+      UNION
+      {
+        ?restriction owl:minCardinality ?cardinality .
+        BIND("minimum cardinality" AS ?restrictionType)
+      }
+      UNION
+      {
+        ?restriction owl:cardinality ?cardinality .
+        BIND("cardinality" AS ?restrictionType)
+      }
+      UNION
+      {
+        ?restriction owl:maxCardinality ?cardinality .
+        BIND("maximum cardinality" AS ?restrictionType)
+      }
+    }`
+  );
+
+  for (const row of restrictionRows) {
+    const propertyIri = bindingValue(row, 'property');
+    const classIri = bindingValue(row, 'class');
+    if (!propertyIri || !classIri || !propertyKinds.has(propertyIri)) continue;
+
+    const restrictions = propertyRestrictions.get(propertyIri) ?? [];
+    const restriction = {
+      classIri,
+      restrictionType: bindingValue(row, 'restrictionType'),
+      cardinality: bindingValue(row, 'cardinality'),
+      onClassIri: bindingValue(row, 'onClass')
+    };
+    const key = `${restriction.classIri}|${restriction.restrictionType}|${restriction.cardinality}|${restriction.onClassIri}`;
+    if (!restrictions.some((item) => `${item.classIri}|${item.restrictionType}|${item.cardinality}|${item.onClassIri}` === key)) {
+      restrictions.push(restriction);
+    }
+    propertyRestrictions.set(propertyIri, restrictions);
   }
 
   const individualRows = await queryRows(
@@ -339,7 +412,8 @@ export const parseRicoRdfXml = async (xml: string, sourceFile = 'data/RiC-O_1-1.
         domains: [...(propertyDomains.get(iri) ?? new Set())],
         ranges: [...(propertyRanges.get(iri) ?? new Set())],
         superproperties: [...(propertySuperproperties.get(iri) ?? new Set())],
-        subproperties: [...(subpropertiesBySuperproperty.get(iri) ?? new Set())]
+        subproperties: [...(subpropertiesBySuperproperty.get(iri) ?? new Set())],
+        restrictions: propertyRestrictions.get(iri) ?? []
       };
     })
     .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));

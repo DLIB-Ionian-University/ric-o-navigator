@@ -499,6 +499,20 @@
             </section>
           </div>
 
+          <section class="block" v-if="classDetails.restrictions.length">
+            <h3>Class Restrictions</h3>
+            <ul>
+              <li v-for="restriction in classDetails.restrictions" :key="`class-restriction-${restriction.property.iri}-${restriction.cardinalityLabel}-${restriction.cardinality}-${restriction.onClass?.iri ?? ''}`">
+                <button class="entity-link-btn" type="button" @click="openRelatedProperty(restriction.property)">{{ restriction.property.label }}</button>
+                <strong class="restriction-cardinality">{{ restriction.cardinalityLabel }}</strong>
+                <span class="entity-text">{{ restriction.cardinality }}</span>
+                <template v-if="restriction.onClass">
+                  <button class="entity-link-btn" type="button" @click="selectClass(restriction.onClass.iri)">{{ restriction.onClass.label }}</button>
+                </template>
+              </li>
+            </ul>
+          </section>
+
           <section class="block">
             <h3>Named Individuals</h3>
             <ul v-if="classDetails.namedIndividuals.length">
@@ -717,6 +731,19 @@
               <p v-else>No subproperties.</p>
             </section>
           </div>
+          <section class="block" v-if="dataPropertyDetails.restrictions.length">
+            <h3>Class Restrictions</h3>
+            <ul>
+              <li v-for="restriction in dataPropertyDetails.restrictions" :key="`data-restriction-${restriction.sourceClass.iri}-${restriction.restrictionType}-${restriction.cardinality}-${restriction.onClass?.iri ?? ''}`">
+                <button class="entity-link-btn" type="button" @click="openClassFromProperty(restriction.sourceClass.iri)">{{ restriction.sourceClass.label }}</button>
+                <span class="entity-text">: {{ restriction.restrictionType }} {{ restriction.cardinality }}</span>
+                <template v-if="restriction.onClass">
+                  <span class="entity-text"> on </span>
+                  <button class="entity-link-btn" type="button" @click="openClassFromProperty(restriction.onClass.iri)">{{ restriction.onClass.label }}</button>
+                </template>
+              </li>
+            </ul>
+          </section>
         </template>
 
         <template v-else-if="activeDetailsKind === 'object' && objectPropertyDetails">
@@ -790,6 +817,19 @@
               <p v-else>No subproperties.</p>
             </section>
           </div>
+          <section class="block" v-if="objectPropertyDetails.restrictions.length">
+            <h3>Class Restrictions</h3>
+            <ul>
+              <li v-for="restriction in objectPropertyDetails.restrictions" :key="`object-restriction-${restriction.sourceClass.iri}-${restriction.restrictionType}-${restriction.cardinality}-${restriction.onClass?.iri ?? ''}`">
+                <button class="entity-link-btn" type="button" @click="openClassFromProperty(restriction.sourceClass.iri)">{{ restriction.sourceClass.label }}</button>
+                <span class="entity-text">: {{ restriction.restrictionType }} {{ restriction.cardinality }}</span>
+                <template v-if="restriction.onClass">
+                  <span class="entity-text"> on </span>
+                  <button class="entity-link-btn" type="button" @click="openClassFromProperty(restriction.onClass.iri)">{{ restriction.onClass.label }}</button>
+                </template>
+              </li>
+            </ul>
+          </section>
           </template>
 
           <p v-if="activeDetailsError" class="error">{{ activeDetailsError }}</p>
@@ -871,6 +911,12 @@ type RicoEntityDetails = {
   superclasses: RicoClassRef[];
   subclasses: RicoClassRef[];
   namedIndividuals: RicoNamedIndividualRef[];
+  restrictions: {
+    property: RicoPropertySummary;
+    cardinalityLabel: string;
+    cardinality: string;
+    onClass: RicoClassRef | null;
+  }[];
   propertiesByDomain: RicoPropertyRef[];
   propertiesByRange: RicoPropertyRef[];
 };
@@ -897,6 +943,12 @@ type RicoPropertyDetails = {
   rangeSubclasses: RicoClassRef[];
   superproperties: RicoPropertySummary[];
   subproperties: RicoPropertySummary[];
+  restrictions: {
+    sourceClass: RicoClassRef;
+    restrictionType: string;
+    cardinality: string;
+    onClass: RicoClassRef | null;
+  }[];
 };
 
 type PlaygroundNode = {
@@ -1644,6 +1696,12 @@ const collapseAllTreeNodes = () => {
   treeExpanded.value = {};
 };
 
+const cardinalityLabel = (restrictionType: string) => {
+  if (restrictionType.startsWith('minimum')) return 'min';
+  if (restrictionType.startsWith('maximum')) return 'max';
+  return 'exactly';
+};
+
 const runClassSearch = async () => {
   classIsSearching.value = true;
   classHasSearched.value = true;
@@ -1726,6 +1784,19 @@ const buildClassDetails = (iri: string): RicoEntityDetails => {
       label: item.label || localName(item.iri)
     }))
   );
+  const restrictions = sortByLabel(
+    allProperties.value.flatMap((prop) =>
+      (prop.restrictions ?? [])
+        .filter((restriction) => restriction.classIri === iri)
+        .map((restriction) => ({
+          property: { iri: prop.iri, label: prop.label, description: prop.description || '', kind: prop.kind },
+          cardinalityLabel: cardinalityLabel(restriction.restrictionType),
+          cardinality: restriction.cardinality,
+          onClass: restriction.onClassIri ? classRefFromIri(restriction.onClassIri) : null,
+          label: `${prop.label} ${restriction.cardinality} ${restriction.onClassIri ? classRefFromIri(restriction.onClassIri).label : ''}`
+        }))
+    )
+  ).map(({ label: _label, ...restriction }) => restriction);
 
   return {
     entity: {
@@ -1738,6 +1809,7 @@ const buildClassDetails = (iri: string): RicoEntityDetails => {
     superclasses,
     subclasses,
     namedIndividuals,
+    restrictions,
     propertiesByDomain: sortByLabel(uniqRows(propertiesByDomain)),
     propertiesByRange: sortByLabel(uniqRows(propertiesByRange))
   };
@@ -1842,6 +1914,15 @@ const buildPropertyDetails = (iri: string, kind: 'data' | 'object'): RicoPropert
       .map(toSummary)
       .filter((item): item is RicoPropertySummary => Boolean(item))
   );
+  const restrictions = sortByLabel(
+    (prop.restrictions ?? []).map((restriction) => ({
+      sourceClass: classRefFromIri(restriction.classIri),
+      restrictionType: restriction.restrictionType,
+      cardinality: restriction.cardinality,
+      onClass: restriction.onClassIri ? classRefFromIri(restriction.onClassIri) : null,
+      label: `${classRefFromIri(restriction.classIri).label} ${restriction.restrictionType} ${restriction.cardinality}`
+    }))
+  ).map(({ label: _label, ...restriction }) => restriction);
 
   return {
     property: { iri: prop.iri, label: prop.label, description: prop.description || '', kind: prop.kind },
@@ -1851,7 +1932,8 @@ const buildPropertyDetails = (iri: string, kind: 'data' | 'object'): RicoPropert
     domainSubclasses,
     rangeSubclasses,
     superproperties,
-    subproperties
+    subproperties,
+    restrictions
   };
 };
 
@@ -3065,6 +3147,10 @@ li small,
 }
 .entity-text {
   color: #21445f;
+}
+.restriction-cardinality {
+  margin: 0 4px 0 8px;
+  color: #172f43;
 }
 .entity-link-list {
   display: flex;
