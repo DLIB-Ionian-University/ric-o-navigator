@@ -5,13 +5,18 @@
   "type": "module",
   "scripts": {
     "generate:data": "node scripts/generate-data.mjs",
-    "dev": "npm run generate:data && vite",
-    "build": "npm run generate:data && vue-tsc -b && vite build",
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@comunica/query-sparql": "^5.3.0",
     "ajv": "^8.18.0",
     "lucide-vue-next": "^0.575.0",
+    "n3": "^2.1.1",
+    "rdf-ext": "^2.6.0",
+    "rdf-parse": "^5.0.0",
+    "readable-stream": "^4.7.0",
     "v-network-graph": "^0.9.22",
     "vue": "^3.5.13"
   },

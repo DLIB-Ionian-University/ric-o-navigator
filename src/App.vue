@@ -36,7 +36,7 @@
           :class="['tab-btn', { active: activeTab === 'playground' }]"
           @click="activateTab('playground')"
         >
-          Nav Playground
+          Modeling Navigator
         </button>
       </div>
 
@@ -69,6 +69,10 @@
       <section v-else-if="activeTab === 'tree'" class="tab-panel">
         <article class="search-card hierarchy-search-card">
           <p v-if="treeError" class="error">{{ treeError }}</p>
+          <div class="tree-toolbar" v-if="treeRootNodes.length > 0">
+            <button type="button" class="secondary-btn tree-action-btn" @click="expandAllTreeNodes">Expand all</button>
+            <button type="button" class="secondary-btn tree-action-btn" @click="collapseAllTreeNodes">Collapse all</button>
+          </div>
           <div class="tree-scroll-panel">
             <ul class="tree-root" v-if="treeRootNodes.length > 0">
               <RicoClassTreeNode
@@ -496,6 +500,17 @@
           </div>
 
           <section class="block">
+            <h3>Named Individuals</h3>
+            <ul v-if="classDetails.namedIndividuals.length">
+              <li v-for="individual in classDetails.namedIndividuals" :key="individual.iri">
+                <span class="entity-text">{{ individual.label }}</span>
+                <small><a class="uri-link" :href="individual.iri" target="_blank" rel="noopener noreferrer">{{ individual.iri }}</a></small>
+              </li>
+            </ul>
+            <p v-else>No named individuals found.</p>
+          </section>
+
+          <section class="block">
             <div class="class-props-head">
               <h3 v-if="classPropertyTableMode === 'domain'">Properties With Domain (Inherited Included)</h3>
               <h3 v-else>Properties With Range (Inherited Included)</h3>
@@ -815,6 +830,9 @@ import RicoClassTreeNode from './components/RicoClassTreeNode.vue';
 import LocalVueSelect from './components/LocalVueSelect.vue';
 import type { UserConfigs, VNetworkGraphInstance } from 'v-network-graph';
 import riconavV1Schema from './schemas/riconav.v1.schema.json';
+import ricoRdfUrl from '../data/RiC-O_1-1.rdf?url';
+import { parseRicoRdfXml } from './lib/parse-rico-rdf';
+import type { NavigatorClass, NavigatorData, NavigatorProperty } from './lib/parse-rico-rdf';
 
 type TabKey = 'classes' | 'tree' | 'data-properties' | 'object-properties' | 'playground';
 type DetailsKind = 'class' | 'data' | 'object' | '';
@@ -829,6 +847,11 @@ type RicoClassRef = {
   iri: string;
   label: string;
   ricCmNotes: string[];
+};
+
+type RicoNamedIndividualRef = {
+  iri: string;
+  label: string;
 };
 
 type RicoPropertyRef = {
@@ -847,6 +870,7 @@ type RicoEntityDetails = {
   ricCmNotes: string[];
   superclasses: RicoClassRef[];
   subclasses: RicoClassRef[];
+  namedIndividuals: RicoNamedIndividualRef[];
   propertiesByDomain: RicoPropertyRef[];
   propertiesByRange: RicoPropertyRef[];
 };
@@ -873,34 +897,6 @@ type RicoPropertyDetails = {
   rangeSubclasses: RicoClassRef[];
   superproperties: RicoPropertySummary[];
   subproperties: RicoPropertySummary[];
-};
-
-type NavigatorClass = {
-  iri: string;
-  label: string;
-  scopeNotes: string[];
-  comments: string[];
-  ricCmNotes: string[];
-  superclasses: string[];
-};
-
-type NavigatorProperty = {
-  iri: string;
-  label: string;
-  description: string;
-  comments: string[];
-  kind: 'object' | 'data' | 'other';
-  domains: string[];
-  ranges: string[];
-  superproperties: string[];
-  subproperties: string[];
-};
-
-type NavigatorData = {
-  generatedAt: string;
-  sourceFile: string;
-  classes: NavigatorClass[];
-  properties: NavigatorProperty[];
 };
 
 type PlaygroundNode = {
@@ -1030,7 +1026,6 @@ const playgroundImportInputRef = ref<HTMLInputElement | null>(null);
 const playgroundZoom = ref(1);
 const appBaseUrl = import.meta.env.BASE_URL;
 const appLogoUrl = `${appBaseUrl}rico-logo.svg`;
-const dataJsonUrl = `${appBaseUrl}rico-data.json`;
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 const parseAndValidateRiconav = (content: string) => {
@@ -1637,6 +1632,18 @@ const toggleTreeNode = (iri: string) => {
   treeExpanded.value = { ...treeExpanded.value, [iri]: !treeExpanded.value[iri] };
 };
 
+const expandAllTreeNodes = () => {
+  const next: Record<string, boolean> = {};
+  for (const [iri, children] of Object.entries(treeChildrenByParent.value)) {
+    if (iri !== '__root__' && children.length > 0) next[iri] = true;
+  }
+  treeExpanded.value = next;
+};
+
+const collapseAllTreeNodes = () => {
+  treeExpanded.value = {};
+};
+
 const runClassSearch = async () => {
   classIsSearching.value = true;
   classHasSearched.value = true;
@@ -1713,6 +1720,12 @@ const buildClassDetails = (iri: string): RicoEntityDetails => {
   };
 
   const scopeNotes = Array.from(new Set([...cls.scopeNotes, ...cls.comments].filter(Boolean)));
+  const namedIndividuals = sortByLabel(
+    (cls.namedIndividuals ?? []).map((item) => ({
+      iri: item.iri,
+      label: item.label || localName(item.iri)
+    }))
+  );
 
   return {
     entity: {
@@ -1724,6 +1737,7 @@ const buildClassDetails = (iri: string): RicoEntityDetails => {
     ricCmNotes: cls.ricCmNotes,
     superclasses,
     subclasses,
+    namedIndividuals,
     propertiesByDomain: sortByLabel(uniqRows(propertiesByDomain)),
     propertiesByRange: sortByLabel(uniqRows(propertiesByRange))
   };
@@ -2411,9 +2425,10 @@ const activateTab = async (tab: TabKey) => {
 const loadNavigatorData = async () => {
   loadError.value = '';
   try {
-    const res = await fetch(dataJsonUrl, { cache: 'no-store' });
-    if (!res.ok) throw new Error('Failed to load rico-data.json (' + res.status + ')');
-    const payload = (await res.json()) as NavigatorData;
+    const res = await fetch(ricoRdfUrl, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to load RiC-O RDF file (' + res.status + ')');
+    const xml = await res.text();
+    const payload = (await parseRicoRdfXml(xml, 'data/RiC-O_1-1.rdf')) as NavigatorData;
     allClasses.value = payload.classes ?? [];
     allProperties.value = payload.properties ?? [];
     syncPlaygroundDefaults();
@@ -2825,6 +2840,16 @@ onMounted(async () => {
   min-height: 0;
   overflow: auto;
   padding-right: 4px;
+}
+.tree-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.tree-action-btn {
+  padding: 6px 10px;
+  font-size: 0.9rem;
 }
 .search-row {
   display: grid;
